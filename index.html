@@ -115,7 +115,6 @@
   @media (max-width:900px){
     .shelf-nav{display:none;}
   }
-
   /* ---------- HERO ---------- */
   .hero{
     position:relative;
@@ -176,7 +175,6 @@
   .hero-stat span{
     font-family:'Space Mono',monospace;font-size:0.7rem;text-transform:uppercase;color:rgba(27,21,51,0.6);
   }
-
   /* hero visual: a "shelf" of floating tag illustrations */
   .hero-visual{
     position:relative;
@@ -218,7 +216,6 @@
     font-size:1.05rem;
     line-height:1.15;
   }
-
   /* ---------- SHELF SECTIONS ---------- */
   .shelf-section{
     padding:74px 0;
@@ -314,8 +311,7 @@
     margin-top:26px;
     max-width:640px;
     line-height:1.6;
-  }
-
+    }
   /* ---------- RAKHI EVENT BANNER ---------- */
   .rakhi{
     position:relative;
@@ -1239,13 +1235,39 @@ document.addEventListener('DOMContentLoaded', function(){
     });
     return {categories:cats};
   }
+  let remoteCatalogReady=false;
+  let remoteCatalogExists=false;
   function loadCatalog(){
     try{
       const raw=JSON.parse(localStorage.getItem(CATALOG_KEY));
       return normalizeCatalogShape(raw&&Array.isArray(raw.categories)?raw:clone(defaults));
     }catch(e){return normalizeCatalogShape(clone(defaults))}
   }
-  function saveCatalog(){localStorage.setItem(CATALOG_KEY,JSON.stringify(catalog));}
+  function saveCatalog(){
+    const data=JSON.stringify(catalog);
+    localStorage.setItem(CATALOG_KEY,data);
+    if(remoteCatalogReady){
+      fetch('/api/catalog',{method:'PUT',headers:{'Content-Type':'application/json','X-Owner-Password':getOwnerPassword()},body:data,keepalive:true}).catch(()=>{});
+    }
+  }
+  async function loadRemoteCatalog(){
+    try{
+      const res=await fetch('/api/catalog',{cache:'no-store'});
+      if(res.ok){
+        const data=await res.json();
+        if(data&&Array.isArray(data.categories)){
+          catalog=normalizeCatalogShape(data);
+          localStorage.setItem(CATALOG_KEY,JSON.stringify(catalog));
+          remoteCatalogExists=true;
+          renderCatalog();renderOwnerCategories();renderOwnerProducts();
+        }
+      }
+    }catch(e){}
+    remoteCatalogReady=true;
+  }
+  async function initializeRemoteCatalog(){
+    await loadRemoteCatalog();
+  }
   let catalogSaveTimer=null;
   function saveCatalogDebounced(){clearTimeout(catalogSaveTimer);catalogSaveTimer=setTimeout(saveCatalog,250);}
   function loadNotice(){try{return JSON.parse(localStorage.getItem(NOTICE_KEY))||{enabled:false,title:'',text:''}}catch(e){return {enabled:false,title:'',text:''}}}
@@ -1277,7 +1299,7 @@ document.addEventListener('DOMContentLoaded', function(){
   let cart=[];
   let ownerUnlocked=false;
 
-  const ownerModal=document.getElementById('ownerLockModal');
+        const ownerModal=document.getElementById('ownerLockModal');
   const ownerPasswordInput=document.getElementById('ownerPassword');
   const ownerLoginPanel=document.getElementById('ownerLoginPanel');
   const ownerUnlockedPanel=document.getElementById('ownerUnlockedPanel');
@@ -1618,6 +1640,7 @@ document.addEventListener('DOMContentLoaded', function(){
   function lockOwner(){clearTimeout(ownerAutoLockTimer);ownerUnlocked=false;ownerScreen?.classList.remove('open');ownerScreen?.setAttribute('aria-hidden','true');closeOwnerLock();}
   function showOwnerScreen(){
     if(!ownerUnlocked){openOwnerLock();return;}
+    if(remoteCatalogReady && !remoteCatalogExists) saveCatalog();
     ownerScreen.classList.add('open');ownerScreen.setAttribute('aria-hidden','false');
     switchOwnerPage('products');renderOwnerProducts();renderOwnerCategories();loadNoticeFields();
   }
@@ -1887,6 +1910,7 @@ document.addEventListener('DOMContentLoaded', function(){
   document.querySelector('#cartDrawer .small-btn')?.addEventListener('click',toggleCart);
 
   renderNotice();renderCatalog();updateCart();
+  initializeRemoteCatalog();
 });
 </script>
 
@@ -1914,3 +1938,4 @@ document.addEventListener('DOMContentLoaded', function(){
 
 </body>
 </html>
+
