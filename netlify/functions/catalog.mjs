@@ -1,55 +1,68 @@
 import { getStore } from "@netlify/blobs";
 
-const STORE_NAME = "blessings-star-catalog";
+const store = getStore("blessings-star-catalog");
 const CATALOG_KEY = "catalog";
 
 export default async (request) => {
-  const store = getStore(STORE_NAME);
+  try {
+    // Anyone can read the shared catalog
+    if (request.method === "GET") {
+      const catalog = await store.get(CATALOG_KEY, { type: "json" });
 
-  if (request.method === "GET") {
-    const catalog = await store.get(CATALOG_KEY, { type: "json" });
-
-    if (!catalog) {
       return new Response(
-        JSON.stringify({ categories: [] }),
+        JSON.stringify(catalog || { categories: [] }),
         {
           status: 200,
-          headers: { "Content-Type": "application/json" }
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store"
+          }
         }
       );
     }
 
-    return new Response(JSON.stringify(catalog), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
+    // Only the owner can save the catalog
+    if (request.method === "PUT" || request.method === "POST") {
+      const catalog = await request.json();
 
-  if (request.method === "PUT") {
-    const password = request.headers.get("X-Owner-Password");
+      if (!catalog || !Array.isArray(catalog.categories)) {
+        return new Response(
+          JSON.stringify({ error: "Invalid catalog data" }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" }
+          }
+        );
+      }
 
-    if (password !== "blessingsstar") {
+      await store.setJSON(CATALOG_KEY, catalog);
+
       return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
+        JSON.stringify({ success: true }),
         {
-          status: 401,
-          headers: { "Content-Type": "application/json" }
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store"
+          }
         }
       );
     }
 
-    const catalog = await request.json();
+    return new Response("Method not allowed", { status: 405 });
 
-    await store.setJSON(CATALOG_KEY, catalog);
+  } catch (error) {
+    console.error("Catalog function error:", error);
 
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({
+        error: "Server error",
+        message: error.message
+      }),
       {
-        status: 200,
+        status: 500,
         headers: { "Content-Type": "application/json" }
       }
     );
   }
-
-  return new Response("Method not allowed", { status: 405 });
 };
