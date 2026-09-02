@@ -777,7 +777,7 @@ body{background:#fff;color:var(--ink)}
 #noticeManager textarea{resize:vertical}
 
 
-/* OWNER LOCK */
+/* OWNER LOCK*/
 #ownerBottomTrigger{
   height:28px;
   width:100%;
@@ -1662,8 +1662,22 @@ document.addEventListener('DOMContentLoaded', function(){
   function lockOwner(){clearTimeout(ownerAutoLockTimer);ownerUnlocked=false;ownerScreen?.classList.remove('open');ownerScreen?.setAttribute('aria-hidden','true');closeOwnerLock();}
   function showOwnerScreen(){
     if(!ownerUnlocked){openOwnerLock();return;}
-    ownerScreen.classList.add('open');ownerScreen.setAttribute('x ,     ‘ ,A2aariTtea-hidden','false');
+    ownerScreen.classList.add('open');ownerScreen.setAttribute('aria-hidden','false');
     switchOwnerPage('products');renderOwnerProducts();renderOwnerCategories();loadNoticeFields();
+    if(remoteCatalogLoading){
+      fetchRemoteCatalog().then(remote=>{
+        if(remote){
+          catalog=remote;
+          localStorage.setItem(CATALOG_KEY,JSON.stringify(catalog));
+          renderCatalog();
+          updateCart();
+          if(ownerUnlocked && ownerScreen?.classList.contains('open')){
+            renderOwnerProducts();
+            renderOwnerCategories();
+          }
+        }
+      });
+    }
   }
   function tryOwnerLogin(){
     if(ownerPasswordInput.value===getOwnerPassword()){
@@ -1730,7 +1744,7 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 
   function renderOwnerCategories(){
-    const root=document.getElementById('ownerCategoriesEditor');if(!root)return;c
+    const root=document.getElementById('ownerCategoriesEditor');if(!root)return;
     root.innerHTML=catalog.categories.map(c=>`<div class="owner-editor-card">
       <div class="owner-category-row">
         <input class="owner-field" data-category-name="${esc(c.id)}" value="${esc(c.name)}">
@@ -1950,6 +1964,14 @@ document.addEventListener('DOMContentLoaded', function(){
     remoteCatalogLoading=false;
     renderCatalog();
     updateCart();
+    // The owner dashboard may already be open while the shared catalog finishes loading.
+    // Re-render both owner editors here so existing categories/products appear immediately
+    // without requiring the owner to add a new item first.
+    if(ownerUnlocked && ownerScreen?.classList.contains('open')){
+      renderOwnerProducts();
+      renderOwnerCategories();
+      loadNoticeFields();
+    }
     if(!remote && localCatalog.categories.some(c=>(c.subcategories||[]).some(s=>(s.products||[]).length))){
       await pushRemoteCatalog();
     }
@@ -1981,6 +2003,3 @@ document.addEventListener('DOMContentLoaded', function(){
 
 </body>
 </html>
-
-
-  
